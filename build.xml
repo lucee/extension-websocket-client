@@ -74,7 +74,7 @@
 
     <echo file="${dist}/extension/META-INF/MANIFEST.MF">Manifest-Version: 1.0
 Built-Date: ${NOW}
-version: "${bundleversion}${build.number}"
+version: "${bundleversion}${build.number}${appendix}"
 id: "${id}"
 name: ${label}
 description: ${description}
@@ -102,9 +102,9 @@ release-type: ${releaseType}
  
     <!-- Put everything in ${build} into .jar file -->
     <jar 
-    	jarfile="${dist}/extension/jars/${name}-${bundleversion}${build.number}.jar" basedir="${build}"  manifest="${src}/META-INF/MANIFEST.MF">
+    	jarfile="${dist}/extension/jars/${name}-${bundleversion}${build.number}${appendix}.jar" basedir="${build}"  manifest="${src}/META-INF/MANIFEST.MF">
       <manifest>
-        <attribute name="Bundle-Version" value="${bundleversion}${build.number}"/>
+        <attribute name="Bundle-Version" value="${bundleversion}${build.number}${appendix}"/>
         <attribute name="Built-Date" value="${NOW}"/>
         <attribute name="Bundle-SymbolicName" value="${bundlename}"/>
       </manifest>
@@ -135,13 +135,13 @@ release-type: ${releaseType}
     <!-- copy the flds necessary -->
     <loadfile property="c1" srcFile="${fld}/function.fld" />
     <replace haystack="${c1}" needle="{bundle-name}" repl="${bundlename}" property="c2"/>
-    <replace haystack="${c2}" needle="{bundle-version}" repl="${bundleversion}${build.number}" property="c3"/>
+    <replace haystack="${c2}" needle="{bundle-version}" repl="${bundleversion}${build.number}${appendix}" property="c3"/>
     <echo message="${c3}" file="${dist}/extension/flds/websocket-client-function.fld"/>
 
 
 
     <!-- Zip everything  -->
-     <zip destfile="${dist}/${bundlename}-${bundleversion}${build.number}.lex">
+     <zip destfile="${dist}/${bundlename}-${bundleversion}${build.number}${appendix}.lex">
         <zipfileset dir="${dist}/extension"/>
     </zip>
 		
