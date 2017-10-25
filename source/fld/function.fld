@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE func-lib PUBLIC "-//Railo//DTD CFML Function Library 1.0//EN"
+	"dtd/web-cfmfunctionlibrary_1_0.dtd">
+<!-- http://www.getrailo.com/j2ee/dtd/web-jspfunctionlibrary_1_0.dtd -->
+<func-lib>
+	<flib-version>1.00</flib-version>
+	<short-name>S3</short-name>
+	<uri>http://extension.lucee.org/function/websocket/client</uri>
+	<display-name>PDF</display-name>
+	<description>
+		Functions to create a websocket client
+	</description>
+
+	<!-- CreateWebSocketClient -->
+	<function>
+		<name>CreateWebSocketClient</name>
+		<class bundle-name="{bundle-name}" bundle-version="{bundle-version}">org.lucee.extension.function.CreateWebSocketClient</class>
+		<description>Creates a websocket client.</description>
+		<argument>
+			<name>endpoint</name>
+			<alias>url</alias>
+			<type>string</type>
+			<required>Yes</required>
+			<description>Endpoint to the websocket (Example: ws://localhost:8080/whatever/)</description>
+	    </argument>
+		<argument>
+			<name>component</name>
+			<alias>cfc,listener</alias>
+			<type>component</type>
+			<required>Yes</required>
+			<description>componenrt contraining the listener functions.</description>
+	    </argument>
+		<return>
+			<type>any</type>
+		</return>
+	</function>
+	
+</func-lib>

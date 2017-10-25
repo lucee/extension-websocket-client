@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+Export-Package: org.lucee.extension.function
+Import-Package: com.neovisionaries.ws.client
+Require-Bundle: com.neovisionaries:nv-websocket-client;bundle-version=2.3.0
+Bundle-ManifestVersion: 2

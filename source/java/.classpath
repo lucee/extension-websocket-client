@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="libs/javax.servlet.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/loader"/>
+	<classpathentry kind="lib" path="libs/lucee.jar"/>
+	<classpathentry kind="lib" path="libs/xml-apis-1.4.1.jar"/>
+	<classpathentry kind="lib" path="libs/com.neovisionaries_nv-websocket-client-2.3.0.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
