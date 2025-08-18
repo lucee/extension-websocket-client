@@ -6,7 +6,7 @@
     <artifactId>websocket-client-extension</artifactId>
     <version>2.3.0.7-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>Compress Extension</name>
+    <name>WebSockets Client Extension</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -16,7 +16,7 @@
         <bundlename>org.lucee.websocket.client.extension</bundlename>
         <luceeCoreVersion>5.0.0.157</luceeCoreVersion>
         <releaseType>server</releaseType>
-        <label>Client for Websocket</label>
+        <label>WebSockets Client Extension</label>
         <release.url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</release.url>
         <snapshot.url>https://oss.sonatype.org/content/repositories/snapshots/</snapshot.url>
     </properties>
