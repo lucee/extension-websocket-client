@@ -4,38 +4,16 @@
         Build WebSocket Client Extension
     </description>
     <!-- set global properties for this build -->
-  <property file="build.properties"/>
-
-
-
-  <scriptdef name="replace" language="javascript">
-     <attribute name="haystack" />
-     <attribute name="needle" />
-     <attribute name="repl" />
-     <attribute name="property" />
-     <![CDATA[
-      var text = attributes.get("haystack");
-      var needle = attributes.get("needle");
-      var repl = attributes.get("repl");
-      text=text.trim();
-
-      var regex = new RegExp(needle,'g');
-      text=text.replace(regex,repl);
-      project.setProperty(attributes.get("property"), text);
-     ]]>
-  </scriptdef>
   
   <property name="lib" location="source/java/libs"/>
   <property name="temp" location="temp"/>
   <property name="build" location="build"/>
-  <property name="dist"  location="dist"/>
+  <property name="dist"  location="target"/>
   <property name="src" location="source/java/src"/>
   <property name="srcImg" location="source/images"/>
   <property name="fld" location="source/fld"/>
   
-  <buildnumber file="build.number"/>
-  
-
+ 
   <path id="classpath">
     <fileset dir="${lib}">
       <include name="**/*.jar" />
@@ -74,7 +52,7 @@
 
     <echo file="${dist}/extension/META-INF/MANIFEST.MF">Manifest-Version: 1.0
 Built-Date: ${NOW}
-version: "${bundleversion}${build.number}${appendix}"
+version: "${bundleversion}"
 id: "${id}"
 name: ${label}
 description: ${description}
@@ -91,7 +69,7 @@ release-type: ${releaseType}
   <target name="compile" depends="copy"
         description="compile the source " >
     <!-- Compile ACF-Infinspan source -->
-    <javac srcdir="${temp}" target="1.7" destdir="${build}" debug="true" debuglevel="lines,vars,source">
+    <javac srcdir="${temp}" source="11" target="11" destdir="${build}" debug="true" debuglevel="lines,vars,source">
       <classpath refid="classpath" />
     </javac>
   </target>
@@ -102,9 +80,9 @@ release-type: ${releaseType}
  
     <!-- Put everything in ${build} into .jar file -->
     <jar 
-    	jarfile="${dist}/extension/jars/${name}-${bundleversion}${build.number}${appendix}.jar" basedir="${build}"  manifest="${src}/META-INF/MANIFEST.MF">
+    	jarfile="${dist}/extension/jars/${bundlename}-${bundleversion}.jar" basedir="${build}"  manifest="${src}/META-INF/MANIFEST.MF">
       <manifest>
-        <attribute name="Bundle-Version" value="${bundleversion}${build.number}${appendix}"/>
+        <attribute name="Bundle-Version" value="${bundleversion}"/>
         <attribute name="Built-Date" value="${NOW}"/>
         <attribute name="Bundle-SymbolicName" value="${bundlename}"/>
       </manifest>
@@ -131,17 +109,25 @@ release-type: ${releaseType}
       </fileset>
     </copy>
 
-
     <!-- copy the flds necessary -->
-    <loadfile property="c1" srcFile="${fld}/function.fld" />
-    <replace haystack="${c1}" needle="{bundle-name}" repl="${bundlename}" property="c2"/>
-    <replace haystack="${c2}" needle="{bundle-version}" repl="${bundleversion}${build.number}${appendix}" property="c3"/>
-    <echo message="${c3}" file="${dist}/extension/flds/websocket-client-function.fld"/>
+    <copy 
+      file="${fld}/function.fld" 
+      tofile="${dist}/extension/flds/websocket-client-function.fld" />
 
+    <replaceregexp 
+      file="${dist}/extension/flds/websocket-client-function.fld" 
+      match="\{bundle-name\}" 
+      replace="${bundlename}" 
+      byline="true"/>
+    <replaceregexp 
+      file="${dist}/extension/flds/websocket-client-function.fld" 
+      match="\{bundle-version\}" 
+      replace="${bundleversion}" 
+      byline="true"/>
 
 
     <!-- Zip everything  -->
-     <zip destfile="${dist}/${bundlename}-${bundleversion}${build.number}${appendix}.lex">
+     <zip destfile="${dist}/${filename}-${bundleversion}.lex">
         <zipfileset dir="${dist}/extension"/>
     </zip>
 		
