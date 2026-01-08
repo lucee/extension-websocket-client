@@ -28,8 +28,8 @@
 			<alias>cfc,listener</alias>
 			<type>component</type>
 			<required>Yes</required>
-			<description>componenrt contraining the listener functions.</description>
-	    </argument>
+			<description>Component with callback listener functions.</description>
+		</argument>
 		<return>
 			<type>any</type>
 		</return>
