@@ -21,12 +21,13 @@ package org.lucee.extension.function;
 
 
 import java.io.File;
+import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.servlet.ServletException;
+import java.util.Map;
 
 import lucee.commons.io.res.Resource;
 import lucee.loader.engine.CFMLEngine;
@@ -166,7 +167,7 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 				}
 			}
 			super.onTextMessage(websocket, text);
-		
+
 		}
 		catch(Exception e) {
 			e.printStackTrace();
@@ -279,12 +280,31 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 		File contextRoot;
 		if(res instanceof File) contextRoot=(File) res;
 		else contextRoot=new File(res.getAbsolutePath());
-		
+
+		// Use reflection to call createPageContext to avoid javax/jakarta Cookie[] signature issues
 		try {
-			return engine.createPageContext(contextRoot, url.getHost(), url.getPath(), "", null, null, null, null, null, -1, true);
-		} catch (ServletException e) {
+			Method method = findCreatePageContextMethod(engine.getClass());
+			if (method == null) {
+				throw new RuntimeException("Could not find createPageContext method on CFMLEngine");
+			}
+			return (PageContext) method.invoke(engine, contextRoot, url.getHost(), url.getPath(), "", null, null, null, null, null, -1L, true);
+		} catch (Exception e) {
 			throw caster.toPageException(e);
 		}
+	}
+
+	private static Method createPageContextMethod = null;
+
+	private Method findCreatePageContextMethod(Class<?> clazz) {
+		if (createPageContextMethod != null) return createPageContextMethod;
+
+		for (Method m : clazz.getMethods()) {
+			if ("createPageContext".equals(m.getName()) && m.getParameterCount() == 11) {
+				createPageContextMethod = m;
+				return m;
+			}
+		}
+		return null;
 	}
 
 	private void releasePageContext(PageContext pc) throws PageException {
