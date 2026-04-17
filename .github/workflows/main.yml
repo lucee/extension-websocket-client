@@ -238,6 +238,21 @@ jobs:
             sleep 1
           done
 
+      - name: Warm up — wait for websocket extension to finish registering endpoints
+        run: |
+          # The extension's Registrar runs on a background thread after Lucee starts —
+          # if we fire integration tests before it's registered /ws/* endpoints, we get
+          # 404 during the WebSocket upgrade. Poll test-websocket-info.cfm which returns
+          # SUCCESS once the extension is loaded and endpoints are registered.
+          for i in {1..30}; do
+            RESPONSE=$(curl -s http://localhost:8888/tests/test-websocket-info.cfm)
+            if echo "$RESPONSE" | grep -q "SUCCESS"; then
+              echo "Extension ready after $i attempts"
+              break
+            fi
+            sleep 1
+          done
+
       - name: Run integration tests
         id: integration-tests
         continue-on-error: true
