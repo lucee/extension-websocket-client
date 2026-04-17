@@ -135,10 +135,189 @@ jobs:
           testLabels: websocketclient
           testAdditional: ${{ github.workspace }}/tests
 
+  test-integration:
+    # Runs the integration test suite that lives in the server repo's tests/integration/
+    # folder against this branch's freshly-built client .lex. Sparse-checkouts only the
+    # integration subtree so we don't pull the whole server repo.
+    runs-on: ubuntu-latest
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        lucee: [ "6.2/stable/jar", "7.0/stable/jar" ]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Determine Tomcat and Java version
+        id: config
+        run: |
+          MAJOR_MINOR=$(echo "${{ matrix.lucee }}" | grep -oE '^[0-9]+\.[0-9]+')
+          case "$MAJOR_MINOR" in
+            6.2)
+              echo "tomcat=tomcat-9"  >> $GITHUB_OUTPUT
+              echo "java=11"          >> $GITHUB_OUTPUT
+              ;;
+            7.0|7.1)
+              echo "tomcat=tomcat-11" >> $GITHUB_OUTPUT
+              echo "java=21"          >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "ERROR: Unknown Lucee major version: $MAJOR_MINOR"; exit 1 ;;
+          esac
+
+      - name: Set up JDK ${{ steps.config.outputs.java }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: '${{ steps.config.outputs.java }}'
+          distribution: 'temurin'
+
+      - name: Download this branch's client .lex
+        uses: actions/download-artifact@v8
+        with:
+          name: websocketclient-lex
+          path: client-lex
+
+      - name: Sparse-checkout server tests
+        uses: actions/checkout@v6
+        with:
+          repository: lucee/extension-websocket
+          path: server-repo
+          sparse-checkout: |
+            tests
+          sparse-checkout-cone-mode: false
+
+      - name: Download latest server extension
+        run: |
+          # Pull the latest snapshot — follows the same naming convention the server repo uses
+          curl -L -o server.lex "https://ext.lucee.org/websocket-extension-3.0.0.20-SNAPSHOT.lex"
+          ls -la server.lex
+
+      - name: Download Lucee Express template
+        run: |
+          EXPRESS_URL=$(curl -s https://update.lucee.org/rest/update/provider/expressTemplates | jq -r '.["${{ steps.config.outputs.tomcat }}"]')
+          curl -L -o express-template.zip "$EXPRESS_URL"
+          unzip -q express-template.zip -d lucee-express
+
+      - name: Download Lucee JAR
+        id: lucee-jar
+        run: |
+          LUCEE_URL=$(curl -s "https://update.lucee.org/rest/update/provider/latest/${{ matrix.lucee }}/url" | tr -d '"')
+          LUCEE_VERSION=$(basename "$LUCEE_URL" | sed 's/lucee-//;s/\.jar//')
+          echo "LUCEE_VERSION=$LUCEE_VERSION" >> $GITHUB_OUTPUT
+          curl -L -f -o lucee.jar "$LUCEE_URL"
+          rm -f lucee-express/lib/lucee-*.jar
+          cp lucee.jar lucee-express/lib/
+
+      - name: Install both extensions into Express
+        run: |
+          mkdir -p lucee-express/lucee-server/deploy
+          cp client-lex/*.lex lucee-express/lucee-server/deploy/
+          cp server.lex       lucee-express/lucee-server/deploy/
+          ls -la lucee-express/lucee-server/deploy/
+
+      - name: Copy listeners and tests from server repo
+        run: |
+          mkdir -p lucee-express/lucee-server/context/websockets
+          find server-repo/tests -path '*/websockets/*.cfc' -exec cp {} lucee-express/lucee-server/context/websockets/ \;
+          cp -r server-repo/tests lucee-express/webapps/ROOT/
+          ls -la lucee-express/lucee-server/context/websockets/
+
+      - name: Configure Tomcat port
+        run: sed -i 's/port="8080"/port="8888"/g' lucee-express/conf/server.xml
+
+      - name: Start Lucee Express
+        run: |
+          cd lucee-express && ./bin/catalina.sh start
+
+      - name: Wait for server
+        run: |
+          for i in {1..60}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/ | grep -q "200\|302\|404"; then
+              echo "HTTP ready after $i seconds"; break
+            fi
+            sleep 1
+          done
+
+      - name: Warm up — wait for websocket extension to finish registering endpoints
+        run: |
+          # The extension's Registrar runs on a background thread after Lucee starts —
+          # if we fire integration tests before it's registered /ws/* endpoints, we get
+          # 404 during the WebSocket upgrade. Poll test-websocket-info.cfm which returns
+          # SUCCESS once the extension is loaded and endpoints are registered.
+          for i in {1..30}; do
+            RESPONSE=$(curl -s http://localhost:8888/tests/test-websocket-info.cfm)
+            if echo "$RESPONSE" | grep -q "SUCCESS"; then
+              echo "Extension ready after $i attempts"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run integration tests
+        id: integration-tests
+        continue-on-error: true
+        run: |
+          FAILED=false
+          for test in test-websocket-client test-lifecycle-callbacks test-return-value-send test-wsclient-broadcast test-wsclients-plural test-binary-send; do
+            echo ""
+            echo "=== Running ${test} ==="
+            RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8888/tests/integration/${test}.cfm)
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+            echo "$BODY"
+            echo "$BODY" > /tmp/${test}.txt
+            if [ "$HTTP_CODE" != "200" ] || echo "$BODY" | grep -q "FAILED"; then
+              echo "${test}: ❌ FAILED"
+              FAILED=true
+            else
+              echo "${test}: ✅ PASSED"
+            fi
+          done
+          if [ "$FAILED" = "true" ]; then
+            echo "INTEGRATION_FAILED=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Dump WebSocket event logs
+        if: always()
+        run: |
+          echo "=== WebSocket Test Event Logs ==="
+          found=false
+          for f in /tmp/ws-*-events.log; do
+            [ -f "$f" ] || continue
+            found=true
+            echo ""
+            echo "--- $f ---"
+            cat "$f"
+          done
+          if [ "$found" = "false" ]; then
+            echo "(no event logs found)"
+          fi
+
+      - name: Stop Lucee Express
+        if: always()
+        run: cd lucee-express && ./bin/shutdown.sh || true
+
+      - name: Show catalina.out
+        if: always()
+        run: cat lucee-express/logs/catalina.out || echo "No catalina.out found"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lucee-logs-${{ steps.lucee-jar.outputs.LUCEE_VERSION }}
+          path: |
+            lucee-express/logs/
+            lucee-express/lucee-server/context/logs/
+
+      - name: Fail if integration tests failed
+        if: steps.integration-tests.outputs.INTEGRATION_FAILED == 'true'
+        run: exit 1
+
   deploy:
     runs-on: ubuntu-latest
-    needs: [setup, test]
-    if: always() && needs.test.result == 'success' && github.ref == 'refs/heads/master' && !inputs.dry-run
+    needs: [setup, test, test-integration]
+    if: always() && needs.test.result == 'success' && needs.test-integration.result == 'success' && github.event_name == 'workflow_dispatch' && !inputs.dry-run
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
