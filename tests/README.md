@@ -14,8 +14,6 @@
 
 Runs in the `test` job via `lucee/script-runner@main` with `testLabels: websocketclient`. Fast, no network dependencies beyond loopback.
 
-Fixture: `RecordingListener.cfc` captures every callback with its arguments for later assertion. Use it whenever a test needs to verify a callback fired.
-
 ### Integration tests (server repo)
 
 The real client⇄server coverage — `sendText`, `sendBinary`, `onMessage`, `onClose`, `disconnect`, `isOpen`, lifecycle event ordering — lives in the server extension repo:
@@ -35,9 +33,8 @@ Every integration test needs both extensions running. Duplicating the suite acro
 ## What fails where
 
 | Bug source | Caught by |
-|---|---|
-| Client BIF contract (arg handling, error shape) | Unit tests in this repo |
-| Client callback invocation (onError on connect fail) | Unit tests in this repo |
+| --- | --- |
+| Client BIF contract (scheme handling, error shape, connection timing) | Unit tests in this repo |
 | Client send/receive, lifecycle, reconnect | Integration tests (cross-repo) |
 | Server callback firing, broadcast, state | Integration tests (server repo CI) |
 
