@@ -96,6 +96,8 @@ component extends="org.lucee.cfml.test.LuceeTestCase" labels="websocketclient" {
 					}
 					catch ( any e ) {
 						var events = listener.getEvents();
+						if ( !arrayLen( events ) )
+							fail( "listener events empty — onError callback never fired (exception was: #e.message#)" );
 						var found = false;
 						for ( var entry in events ) {
 							if ( entry == "onError:connect" ) {
@@ -103,7 +105,8 @@ component extends="org.lucee.cfml.test.LuceeTestCase" labels="websocketclient" {
 								break;
 							}
 						}
-						expect( found ).toBeTrue();
+						if ( !found )
+							fail( "expected 'onError:connect' in events, got: " & events.toJSON() );
 					}
 				});
 			});
