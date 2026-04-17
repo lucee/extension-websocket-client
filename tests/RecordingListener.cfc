@@ -14,11 +14,11 @@ component hint="Test fixture — records every callback invocation for assertion
 		arrayAppend( variables.events, "onClose" );
 	}
 
-	function onError( type, cause, data ) {
-		var entry = "onError:" & arguments.type;
-		if ( structKeyExists( arguments, "data" ) && !isNull( arguments.data ) )
-			entry &= ":withData";
-		arrayAppend( variables.events, entry );
+	function onError( type, cause ) {
+		// Match the 2-arg signature the existing WebSocketListener uses. The 3rd
+		// `data` arg is only populated for `message`-type errors; if we need to
+		// test that later, add a separate fixture.
+		arrayAppend( variables.events, "onError:" & arguments.type );
 	}
 
 	function onPing() {
