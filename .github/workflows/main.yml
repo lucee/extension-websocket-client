@@ -5,13 +5,17 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      deploy:
+        description: 'Deploy to Maven Central'
+        type: boolean
+        default: false
       lucee-versions:
         description: 'JSON array of Lucee versions to test'
         default: '["7.0/snapshot/light","7.0/stable/light","6.2/snapshot/light","6.2/stable/light"]'
-      dry-run:
-        description: 'Dry run - skip deploy to Maven'
-        type: boolean
-        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   setup:
@@ -317,7 +321,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [setup, test, test-integration]
-    if: always() && needs.test.result == 'success' && needs.test-integration.result == 'success' && github.event_name == 'workflow_dispatch' && !inputs.dry-run
+    if: always() && needs.test.result == 'success' && needs.test-integration.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.deploy
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
