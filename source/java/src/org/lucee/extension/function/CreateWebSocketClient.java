@@ -169,6 +169,7 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 			}
 			catch(Throwable t) {
 				System.err.println("[LDEV-6273-DIAG] comp.call threw: " + t);
+				t.printStackTrace();
 				throw t;
 			}
 			finally {
