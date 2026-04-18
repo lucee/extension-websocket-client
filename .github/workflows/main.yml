@@ -317,6 +317,17 @@ jobs:
             sleep 1
           done
 
+      - name: LDEV-6273 DIAG — extra settle time + extra HTTP hits
+        run: |
+          # Probe whether the post-restart IOB is purely a timing/traffic issue.
+          # If servletConfigs fills with additional HTTP traffic, these extra
+          # hits + sleep will let the reflection test pass without any code change.
+          for i in 1 2 3 4 5; do
+            curl -s -o /dev/null http://localhost:8888/tests/test-websocket-info.cfm
+            sleep 1
+          done
+          echo "5 extra HTTP hits + 5s settle complete"
+
       - name: Run post-restart round-trip
         id: post-restart-test
         continue-on-error: true
