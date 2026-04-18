@@ -284,6 +284,14 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 		// LDEV-6273: resolve the live engine per-call. A static cache pinned the
 		// retired engine past cfadmin restart and blew up at PageContextUtil:196.
 		CFMLEngine engine = CFMLEngineFactory.getInstance();
+		// LDEV-6273 DIAG: verify the wrapper is returning a healthy engine.
+		try {
+			Object scfgs = engine.getClass().getMethod("getServletConfigs").invoke(engine);
+			int len = (scfgs != null && scfgs.getClass().isArray()) ? java.lang.reflect.Array.getLength(scfgs) : -1;
+			System.err.println("[LDEV-6273-DIAG] createPageContext: engineHash=" + System.identityHashCode(engine) + " engineCls=" + engine.getClass().getName() + " servletConfigs.length=" + len);
+		} catch (Throwable diag) {
+			System.err.println("[LDEV-6273-DIAG] createPageContext diag probe failed: " + diag);
+		}
 		Resource res=config.getRootDirectory();
 		File contextRoot;
 		if(res instanceof File) contextRoot=(File) res;
