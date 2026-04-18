@@ -74,8 +74,11 @@ public class CreateWebSocketClient extends BIF {
 		Cast caster = engine.getCastUtil();
 		HTTPUtil httpUtil = CFMLEngineFactory.getInstance().getHTTPUtil();
 		
-		// 
-		String str=engine.getStringUtil().replace(endpoint, "ws://", "http://", true, true);
+		// LDEV-6273: normalise both ws:// and wss:// so URL parsing accepts the scheme
+		// for PageContext host/path lookup. The actual WebSocket connect uses the
+		// original `endpoint` string, not this normalised copy.
+		String str=engine.getStringUtil().replace(endpoint, "wss://", "https://", true, true);
+		str=engine.getStringUtil().replace(str, "ws://", "http://", true, true);
 		URL url;
 		try {
 			url = httpUtil.toURL(str);
@@ -107,15 +110,12 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 	private static final Collection.Key ON_PONG;
 	
 	
-	private static CFMLEngine engine;
-	private static Cast caster;
-	private static Creation creation;
-	
 	static {
-		engine = CFMLEngineFactory.getInstance();
-		caster = engine.getCastUtil();
-		creation = engine.getCreationUtil();
-		
+		// LDEV-6273: resolve per-class-init for the key constants only — do NOT
+		// cache engine/caster/creation as statics. They'd pin a retired CFMLEngine
+		// across cfadmin restart and the reading thread would IOB in PageContextUtil.
+		Cast caster = CFMLEngineFactory.getInstance().getCastUtil();
+
 		ON_ERROR = caster.toKey("onError");
 		ON_MSG = caster.toKey("onMessage");
 		ON_BINARY_MSG = caster.toKey("onBinaryMessage");
@@ -156,22 +156,16 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 
 	@Override
 	public void onTextMessage(WebSocket websocket, String text) throws Exception {
-		try {
-			if(has(comp,ON_MSG)) {
-				PageContext pc=null;
-				try{
-					comp.call(pc=createPageContext(), ON_MSG, new Object[]{text});
-				}
-				finally {
-					releasePageContext(pc);
-				}
+		if(has(comp,ON_MSG)) {
+			PageContext pc=null;
+			try{
+				comp.call(pc=createPageContext(), ON_MSG, new Object[]{text});
 			}
-			super.onTextMessage(websocket, text);
-
+			finally {
+				releasePageContext(pc);
+			}
 		}
-		catch(Exception e) {
-			e.printStackTrace();
-		}
+		super.onTextMessage(websocket, text);
 	}
 
 	@Override
@@ -276,6 +270,9 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 	}
 
 	private PageContext createPageContext() throws PageException {
+		// LDEV-6273: resolve the live engine per-call. A static cache pinned the
+		// retired engine past cfadmin restart and blew up at PageContextUtil:196.
+		CFMLEngine engine = CFMLEngineFactory.getInstance();
 		Resource res=config.getRootDirectory();
 		File contextRoot;
 		if(res instanceof File) contextRoot=(File) res;
@@ -289,7 +286,7 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 			}
 			return (PageContext) method.invoke(engine, contextRoot, url.getHost(), url.getPath(), "", null, null, null, null, null, -1L, true);
 		} catch (Exception e) {
-			throw caster.toPageException(e);
+			throw engine.getCastUtil().toPageException(e);
 		}
 	}
 
@@ -309,7 +306,7 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 
 	private void releasePageContext(PageContext pc) throws PageException {
 		if(pc==null) return;
-		engine.releasePageContext(pc, true);
+		CFMLEngineFactory.getInstance().releasePageContext(pc, true);
 	}
 
 	private boolean has(Component comp, Key key) {
