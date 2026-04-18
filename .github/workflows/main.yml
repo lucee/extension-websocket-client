@@ -141,10 +141,15 @@ jobs:
 
   test-integration:
     # Runs the integration test suite that lives in the server repo's tests/integration/
-    # folder against this branch's freshly-built client .lex. Sparse-checkouts only the
-    # integration subtree so we don't pull the whole server repo.
+    # folder against this branch's freshly-built client .lex. Pulls the server repo
+    # and builds it from the LDEV-6221 redux branch so the post-restart delegation
+    # chain works (needed to prove LDEV-6273 — the client-side IOB fix — end-to-end).
     runs-on: ubuntu-latest
     needs: [build]
+    env:
+      # LDEV-6273: trigger-lucee-restart.cfm and Lucee's admin both read this.
+      # Must be set at job level so catalina.sh's spawned JVM inherits it.
+      LUCEE_ADMIN_PASSWORD: testadmin
     strategy:
       fail-fast: false
       matrix:
@@ -181,20 +186,23 @@ jobs:
           name: websocketclient-lex
           path: client-lex
 
-      - name: Sparse-checkout server tests
+      - name: Checkout server repo at LDEV-6221 redux branch
+        # LDEV-6273: we need the redux-branch server fixes for the post-restart
+        # delegation chain to work, so the client IOB regression test can prove
+        # end-to-end. Revert to sparse-checkout + curl from ext.lucee.org once
+        # both ldev-6221-redux (server) and LDEV-6273 (client) have merged.
         uses: actions/checkout@v6
         with:
           repository: lucee/extension-websocket
+          ref: ldev-6221-redux
           path: server-repo
-          sparse-checkout: |
-            tests
-          sparse-checkout-cone-mode: false
 
-      - name: Download latest server extension
+      - name: Build server extension .lex from source
         run: |
-          # Pull the latest snapshot — follows the same naming convention the server repo uses
-          curl -L -o server.lex "https://ext.lucee.org/websocket-extension-3.0.0.20-SNAPSHOT.lex"
-          ls -la server.lex
+          cd server-repo
+          mvn -B -e -f pom.xml clean install -DskipTests
+          ls -la target/*.lex
+          cp target/*.lex ../server.lex
 
       - name: Download Lucee Express template
         run: |
@@ -281,6 +289,61 @@ jobs:
             echo "INTEGRATION_FAILED=true" >> $GITHUB_OUTPUT
           fi
 
+      # ---------- LDEV-6273 restart scenario ----------
+      # Triggers cfadmin action="restart", waits for Lucee to recover, and runs
+      # a post-restart WebSocket round-trip. Regression gate: asserts no
+      # "Index 0 out of bounds" appears in catalina.out — the client-side IOB
+      # from the pre-fix stale static engine reference.
+
+      - name: Trigger Lucee engine restart (LDEV-6273 scenario)
+        id: restart-trigger
+        continue-on-error: true
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8888/tests/integration/trigger-lucee-restart.cfm)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "$BODY"
+          if [ "$HTTP_CODE" != "200" ] || echo "$BODY" | grep -q "FAILED"; then
+            echo "RESTART_TRIGGER_FAILED=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wait for Lucee to come back online
+        run: |
+          for i in {1..60}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/tests/test-websocket-info.cfm | grep -q "200"; then
+              echo "Lucee responding after $i attempts"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run post-restart round-trip
+        id: post-restart-test
+        continue-on-error: true
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8888/tests/integration/test-reflection-restart.cfm)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "$BODY"
+          if [ "$HTTP_CODE" != "200" ] || echo "$BODY" | grep -q "FAILED"; then
+            echo "POST_RESTART_FAILED=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Regression gate — no IOB in catalina.out
+        id: iob-check
+        continue-on-error: true
+        run: |
+          # LDEV-6273: pre-fix, the websocket-client reading thread IOBs against
+          # the retired engine's empty servletConfigs on every incoming frame after
+          # cfadmin restart. This is the exact string we're gating on.
+          if grep -q "Index 0 out of bounds for length 0" lucee-express/logs/catalina.out; then
+            echo "IOB_FOUND=true" >> $GITHUB_OUTPUT
+            echo "LDEV-6273 regression — IOB present in catalina.out:"
+            grep -B2 -A5 "Index 0 out of bounds for length 0" lucee-express/logs/catalina.out | head -40
+          else
+            echo "No IOB in catalina.out — client handles post-restart frames cleanly"
+          fi
+
       - name: Dump WebSocket event logs
         if: always()
         run: |
@@ -314,8 +377,12 @@ jobs:
             lucee-express/logs/
             lucee-express/lucee-server/context/logs/
 
-      - name: Fail if integration tests failed
-        if: steps.integration-tests.outputs.INTEGRATION_FAILED == 'true'
+      - name: Fail if any integration step failed
+        if: >-
+          steps.integration-tests.outputs.INTEGRATION_FAILED == 'true'
+          || steps.restart-trigger.outputs.RESTART_TRIGGER_FAILED == 'true'
+          || steps.post-restart-test.outputs.POST_RESTART_FAILED == 'true'
+          || steps.iob-check.outputs.IOB_FOUND == 'true'
         run: exit 1
 
   deploy:
