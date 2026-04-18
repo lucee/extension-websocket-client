@@ -156,10 +156,20 @@ class WebSocketAdapterImpl extends WebSocketAdapter {
 
 	@Override
 	public void onTextMessage(WebSocket websocket, String text) throws Exception {
-		if(has(comp,ON_MSG)) {
+		// LDEV-6273 DIAG: temporary breadcrumbs to trace post-restart dispatch silently dropping messages.
+		System.err.println("[LDEV-6273-DIAG] onTextMessage enter, text.len=" + (text == null ? -1 : text.length()) + ", compHash=" + System.identityHashCode(comp));
+		boolean hasHandler = has(comp, ON_MSG);
+		System.err.println("[LDEV-6273-DIAG] has(comp, ON_MSG)=" + hasHandler + ", ON_MSG=" + ON_MSG);
+		if(hasHandler) {
 			PageContext pc=null;
 			try{
+				System.err.println("[LDEV-6273-DIAG] before comp.call ON_MSG");
 				comp.call(pc=createPageContext(), ON_MSG, new Object[]{text});
+				System.err.println("[LDEV-6273-DIAG] after comp.call ON_MSG (success)");
+			}
+			catch(Throwable t) {
+				System.err.println("[LDEV-6273-DIAG] comp.call threw: " + t);
+				throw t;
 			}
 			finally {
 				releasePageContext(pc);
